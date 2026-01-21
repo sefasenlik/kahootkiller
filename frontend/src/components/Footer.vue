@@ -6,7 +6,7 @@
     <div class="footer-text">
       <p>{{ t.developedBy }}</p>
       <p>{{ t.copyright }}</p>
-      <p><a href="https://github.com/sefasenlik/hadoop" target="_blank" rel="noopener noreferrer">{{ t.projectRepository }}</a></p>
+      <p><a href="https://github.com/sefasenlik/kahootkiller" target="_blank" rel="noopener noreferrer">{{ t.projectRepository }}</a></p>
     </div>
   </footer>
 </template>

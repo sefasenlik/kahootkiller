@@ -1,4 +1,4 @@
-# KahootKiller 🎯
+# Hadoop!
 
 A Kahoot-like quiz application with AI-powered grading. Built with Vue.js and Express.js.
 
