@@ -1,4 +1,4 @@
-# Hadoop!
+<img src="/frontend/public/logo.png" alt="Game Logo" width="300"/>
 
 A Kahoot-like quiz application with AI-powered grading. Built with Vue.js and Express.js.
 
