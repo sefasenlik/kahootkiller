@@ -1,0 +1,31 @@
+services:
+  backend:
+    build: ./backend
+    container_name: kahootkiller-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+    volumes:
+      - ./backend/quiz.db:/app/quiz.db
+    networks:
+      - kahootkiller-network
+
+  frontend:
+    build: ./frontend
+    container_name: kahootkiller-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - kahootkiller-network
+
+networks:
+  kahootkiller-network:
+    driver: bridge
