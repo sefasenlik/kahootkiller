@@ -61,14 +61,35 @@
             <div v-if="question.character_limit" class="character-counter">
               {{ question.character_limit - (question.userAnswer?.length || 0) }} {{ t.charactersRemaining }}
             </div>
-            <button 
-              @click="submitAnswer(question)" 
-              :disabled="!question.userAnswer || question.submitting || isDeadlinePassed(question.deadline)"
-            >
-              {{ question.submitting ? t.submitting : isDeadlinePassed(question.deadline) ? t.deadlinePassedBtn : t.submitAnswer }}
-            </button>
+            <div class="button-row">
+              <button 
+                @click="submitAnswer(question)" 
+                :disabled="!question.userAnswer || question.submitting || isDeadlinePassed(question.deadline)"
+                class="submit-btn"
+              >
+                <span class="btn-text-full">{{ question.submitting ? t.submitting : isDeadlinePassed(question.deadline) ? t.deadlinePassedBtn : t.submitAnswer }}</span>
+                <span class="btn-text-short">✓</span>
+              </button>
+              <button 
+                v-if="question.image_url"
+                @click="openImageModal(question.image_url)"
+                class="image-btn"
+                type="button"
+              >
+                <span class="btn-text-full">🖼️ {{ t.viewImage || 'View Image' }}</span>
+                <span class="btn-text-short">🖼️</span>
+              </button>
+            </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Image Modal -->
+    <div v-if="showImageModal" class="modal-overlay" @click="closeImageModal">
+      <div class="modal-content" @click.stop>
+        <button class="modal-close" @click="closeImageModal">✕</button>
+        <img :src="modalImageUrl" alt="Question image" />
       </div>
     </div>
   </div>
@@ -93,6 +114,8 @@ export default {
     const userId = ref('');
     const questions = ref([]);
     const loading = ref(false);
+    const showImageModal = ref(false);
+    const modalImageUrl = ref('');
 
     const t = computed(() => getTranslation(props.lang));
 
@@ -196,6 +219,16 @@ export default {
       }
     };
 
+    const openImageModal = (imageUrl) => {
+      modalImageUrl.value = imageUrl;
+      showImageModal.value = true;
+    };
+
+    const closeImageModal = () => {
+      showImageModal.value = false;
+      modalImageUrl.value = '';
+    };
+
     watch(username, (newUsername) => {
       if (newUsername) {
         loadQuestions();
@@ -214,6 +247,10 @@ export default {
       formatDeadline,
       isDeadlinePassed,
       changeUsername,
+      showImageModal,
+      modalImageUrl,
+      openImageModal,
+      closeImageModal,
       t
     };
   }
@@ -410,7 +447,15 @@ export default {
   text-align: right;
 }
 
-.answer-form button {
+.button-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.submit-btn {
+  flex: 1;
+  max-width: 200px;
   padding: 12px 24px;
   background: #c2185b;
   color: white;
@@ -420,8 +465,132 @@ export default {
   font-weight: 600;
 }
 
-.answer-form button:disabled {
+.submit-btn:disabled {
   background: #ccc;
   cursor: not-allowed;
+}
+
+.btn-text-short {
+  display: none;
+}
+
+@media (max-width: 450px) {
+  .btn-text-full {
+    display: none;
+  }
+  .btn-text-short {
+    display: inline;
+  }
+  .submit-btn {
+    padding: 12px 16px;
+    max-width: 60px;
+    min-height: 48px;
+    font-size: 20px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .image-btn {
+    padding: 12px 16px;
+    min-height: 48px;
+    font-size: 20px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.image-btn {
+  padding: 12px 20px;
+  background: #2a1a20;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.3s;
+}
+
+.image-btn:hover {
+  background: #333;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-content {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-content img {
+  max-width: 100%;
+  max-height: 80vh;
+  display: block;
+  border-radius: 8px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s;
+  z-index: 1;
+}
+
+.modal-close:hover {
+  background: rgba(194, 24, 91, 0.9);
 }
 </style>

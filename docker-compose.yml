@@ -4,23 +4,30 @@ services:
     container_name: kahootkiller-backend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - PORT=3000
+      - BASE_PATH=${BASE_PATH:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o-mini}
     volumes:
-      - ./backend/quiz.db:/app/quiz.db
+      - ./backend/data:/app/data
+      - ./backend/uploads:/app/uploads
     networks:
       - kahootkiller-network
 
   frontend:
-    build: ./frontend
+    build: 
+      context: ./frontend
+      args:
+        - VITE_BASE_PATH=${VITE_BASE_PATH:-}
     container_name: kahootkiller-frontend
     restart: unless-stopped
+    environment:
+      - VITE_BASE_PATH=${VITE_BASE_PATH:-}
     ports:
-      - "80:80"
+      - "8081:80"
     depends_on:
       - backend
     networks:

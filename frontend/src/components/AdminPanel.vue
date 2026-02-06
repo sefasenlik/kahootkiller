@@ -57,6 +57,60 @@
             min="1"
           />
         </div>
+        <div class="form-group">
+          <label>{{ t.imageUrl || 'Image (optional)' }}:</label>
+          <div class="upload-options">
+            <button 
+              type="button" 
+              @click="uploadMode = 'url'" 
+              :class="['upload-mode-btn', { active: uploadMode === 'url' }]"
+            >
+              📝 {{ t.pasteUrl || 'Paste URL' }}
+            </button>
+            <button 
+              type="button" 
+              @click="uploadMode = 'file'" 
+              :class="['upload-mode-btn', { active: uploadMode === 'file' }]"
+            >
+              📁 {{ t.uploadFile || 'Upload File' }}
+            </button>
+          </div>
+          
+          <div v-if="uploadMode === 'url'" class="url-input">
+            <input 
+              v-model="newQuestion.image_url" 
+              type="text"
+              :placeholder="t.imageUrlPlaceholder || 'Enter image URL (https://...)'"
+            />
+          </div>
+          
+          <div v-else class="file-input">
+            <input 
+              type="file" 
+              ref="fileInput"
+              @change="handleFileSelect"
+              accept="image/*"
+              id="image-upload"
+            />
+            <label for="image-upload" class="file-upload-label">
+              {{ selectedFileName || (t.chooseFile || 'Choose an image file') }}
+            </label>
+            <button 
+              v-if="selectedFile" 
+              type="button" 
+              @click="uploadImage" 
+              :disabled="uploading"
+              class="upload-btn"
+            >
+              {{ uploading ? (t.uploading || 'Uploading...') : (t.upload || 'Upload') }}
+            </button>
+          </div>
+          
+          <div v-if="newQuestion.image_url" class="image-preview">
+            <img :src="newQuestion.image_url" alt="Preview" @error="handleImageError" />
+            <button type="button" @click="removeImage" class="remove-image-btn">✕</button>
+          </div>
+        </div>
         <button @click="addQuestion" :disabled="!newQuestion.question || !newQuestion.correct_answer">
           {{ t.addQuestionBtn }}
         </button>
@@ -87,6 +141,9 @@
             <div class="question-header">
               <div>
                 <h3>{{ question.question }}</h3>
+                <div v-if="question.image_url" class="question-image">
+                  <img :src="question.image_url" alt="Question image" />
+                </div>
                 <p class="meta">
                   {{ t.created }}: {{ formatDate(question.created_at) }} | 
                   {{ t.responses }}: {{ question.response_count }}
@@ -213,6 +270,11 @@ export default {
     const responses = ref([]);
     const viewingResults = ref(false);
     const scoringQuestions = ref(new Set());
+    const uploadMode = ref('url');
+    const selectedFile = ref(null);
+    const selectedFileName = ref('');
+    const uploading = ref(false);
+    const fileInput = ref(null);
 
     const t = computed(() => getTranslation(props.lang));
 
@@ -220,7 +282,8 @@ export default {
       question: '',
       correct_answer: '',
       deadline: '',
-      character_limit: null
+      character_limit: null,
+      image_url: ''
     });
 
     const authenticate = async () => {
@@ -266,7 +329,8 @@ export default {
           question: '',
           correct_answer: '',
           deadline: '',
-          character_limit: null
+          character_limit: null,
+          image_url: ''
         };
         showAddQuestion.value = false;
         loadQuestions();
@@ -345,6 +409,14 @@ export default {
           password: password.value
         });
         
+        // Log AI prompt and response for debugging
+        if (response.data.debug) {
+          console.group('🤖 AI Scoring Debug Info');
+          console.log('📝 Prompt sent to AI:', response.data.debug.prompt);
+          console.log('💬 AI Response:', response.data.debug.ai_response);
+          console.groupEnd();
+        }
+        
         alert(t.value.scoredSuccess + `\n${response.data.scored_count} ${t.value.responses.toLowerCase()}`);
         
         // Refresh questions list to update has_scored_responses
@@ -407,6 +479,55 @@ export default {
       return '';
     };
 
+    const handleImageError = (event) => {
+      event.target.style.display = 'none';
+    };
+
+    const handleFileSelect = (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        selectedFile.value = file;
+        selectedFileName.value = file.name;
+      }
+    };
+
+    const uploadImage = async () => {
+      if (!selectedFile.value) return;
+      
+      uploading.value = true;
+      try {
+        const formData = new FormData();
+        formData.append('image', selectedFile.value);
+        
+        const response = await axios.post('/api/admin/upload-image', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        newQuestion.value.image_url = response.data.imageUrl;
+        selectedFile.value = null;
+        selectedFileName.value = '';
+        if (fileInput.value) {
+          fileInput.value.value = '';
+        }
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        alert(t.value.uploadFailed || 'Failed to upload image. Please try again.');
+      } finally {
+        uploading.value = false;
+      }
+    };
+
+    const removeImage = () => {
+      newQuestion.value.image_url = '';
+      selectedFile.value = null;
+      selectedFileName.value = '';
+      if (fileInput.value) {
+        fileInput.value.value = '';
+      }
+    };
+
     return {
       authenticated,
       password,
@@ -431,6 +552,15 @@ export default {
       hasScores,
       getPodiumClass,
       viewingResults,
+      handleImageError,
+      uploadMode,
+      selectedFile,
+      selectedFileName,
+      uploading,
+      fileInput,
+      handleFileSelect,
+      uploadImage,
+      removeImage,
       t
     };
   }
@@ -843,5 +973,142 @@ export default {
   color: #555;
   font-style: italic;
   margin-top: 8px;
+}
+
+.image-preview {
+  margin-top: 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 400px;
+  position: relative;
+}
+
+.image-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s;
+}
+
+.remove-image-btn:hover {
+  background: rgba(194, 24, 91, 0.9);
+}
+
+.upload-options {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.upload-mode-btn {
+  flex: 1;
+  padding: 10px;
+  background: #3a2a30;
+  color: white;
+  border: 2px solid #3a2a30;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.upload-mode-btn.active {
+  background: #c2185b;
+  border-color: #c2185b;
+}
+
+.upload-mode-btn:hover {
+  opacity: 0.8;
+}
+
+.url-input input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+.file-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.file-input input[type="file"] {
+  display: none;
+}
+
+.file-upload-label {
+  flex: 1;
+  padding: 12px;
+  background: #c2185b;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.3s;
+  color: #333;
+  font-weight: 500;
+}
+
+.file-upload-label:hover {
+  border-color: #c2185b;
+  background: #fff;
+  color: #c2185b;
+}
+
+.upload-btn {
+  padding: 12px 20px;
+  background: #c2185b;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s;
+  white-space: nowrap;
+}
+
+.upload-btn:hover {
+  background: #880e4f;
+}
+
+.upload-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.question-image {
+  margin: 12px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 600px;
+}
+
+.question-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid #e0e0e0;
 }
 </style>

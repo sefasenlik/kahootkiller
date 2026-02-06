@@ -4,12 +4,18 @@ import { dirname, join } from 'path';
 import fs from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dbPath = join(__dirname, 'quiz.db');
+const dbPath = join(__dirname, 'data', 'quiz.db');
 
 let db;
 
 // Initialize database
 const SQL = await initSqlJs();
+
+// Ensure data directory exists
+const dataDir = dirname(dbPath);
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
 
 // Load existing database or create new one
 if (fs.existsSync(dbPath)) {
@@ -67,6 +73,17 @@ try {
 } catch (e) {
   // Log and continue; missing column will cause runtime errors otherwise
   console.error('Database migration check failed:', e && e.message ? e.message : e);
+}
+
+// Migration: ensure `image_url` column exists in questions table
+try {
+  const info = db.exec("PRAGMA table_info(questions);");
+  const cols = (info && info[0] && info[0].values) ? info[0].values.map(r => r[1]) : [];
+  if (!cols.includes('image_url')) {
+    db.run('ALTER TABLE questions ADD COLUMN image_url TEXT DEFAULT NULL;');
+  }
+} catch (e) {
+  console.error('Image URL migration check failed:', e && e.message ? e.message : e);
 }
 
 // Migration: ensure `user_id` column exists in user_responses table

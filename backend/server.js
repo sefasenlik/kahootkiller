@@ -2,15 +2,51 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
+import multer from 'multer';
+import path from 'path';
+import https from 'https';
+import { fileURLToPath } from 'url';
 import db, { saveDatabase } from './database.js';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, 'uploads'));
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (extname && mimetype) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
 
 // Helper function to convert sql.js result to objects
 function queryToObjects(result) {
@@ -43,6 +79,20 @@ const verifyAdmin = (req, res, next) => {
 
 // ============== ADMIN ENDPOINTS ==============
 
+// Upload image endpoint
+app.post('/api/admin/upload-image', upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const basePath = process.env.BASE_PATH || '';
+    const imageUrl = `${basePath}/uploads/${req.file.filename}`;
+    res.json({ imageUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Verify admin password
 app.post('/api/admin/verify', (req, res) => {
   const { password } = req.body;
@@ -55,11 +105,11 @@ app.post('/api/admin/verify', (req, res) => {
 
 // Add a new question
 app.post('/api/admin/questions', verifyAdmin, (req, res) => {
-  const { question, correct_answer, deadline, character_limit } = req.body;
+  const { question, correct_answer, deadline, character_limit, image_url } = req.body;
   
   try {
-    db.run('INSERT INTO questions (question, correct_answer, deadline, character_limit) VALUES (?, ?, ?, ?)', 
-      [question, correct_answer, deadline, character_limit || null]);
+    db.run('INSERT INTO questions (question, correct_answer, deadline, character_limit, image_url) VALUES (?, ?, ?, ?, ?)', 
+      [question, correct_answer, deadline, character_limit || null, image_url || null]);
     const result = db.exec('SELECT last_insert_rowid() as id');
     const id = result[0].values[0][0];
     saveDatabase();
@@ -140,7 +190,7 @@ app.post('/api/admin/questions/:id/score', verifyAdmin, async (req, res) => {
     // Prepare AI prompt
     const prompt = `You are grading open-ended quiz responses. 
 
-IMPORTANT: Detect the language of the question and provide all feedback in the SAME language as the question.
+CRITICAL INSTRUCTION: You MUST provide all feedback in the EXACT SAME language as the question below. If the question is in English, write feedback in English. If the question is in Turkish, write feedback in Turkish. DO NOT mix languages.
 
 Question: "${question.question}"
 Correct Answer: "${question.correct_answer}"
@@ -155,15 +205,15 @@ Grade each of the following student responses on a scale of 0-100, where:
 Student Responses:
 ${responses.map((r, i) => `${i + 1}. ${r.username}: "${r.answer}"`).join('\n')}
 
-Respond in JSON format with an array of objects. IMPORTANT: Write the "feedback" field in the SAME language as the question above.
+Respond ONLY with a valid JSON array. Each "feedback" field MUST be in the SAME language as the question ("${question.question}").
 
-Format:
+Required JSON format:
 [
   {"response_id": 1, "score": 85, "feedback": "Good answer that captures the main concept."},
   {"response_id": 2, "score": 60, "feedback": "Partially correct but missing key details."}
 ]
 
-Remember: Use the SAME language as the question for the feedback!`;
+REMINDER: Match the language of the question for all feedback text!`;
 
     // Call OpenRouter API
     const aiResponse = await axios.post(
@@ -180,7 +230,7 @@ Remember: Use the SAME language as the question for the feedback!`;
           'Content-Type': 'application/json'
         },
         timeout: 120000, // 2 minutes timeout
-        httpsAgent: new (require('https').Agent)({
+        httpsAgent: new https.Agent({
           rejectUnauthorized: true,
           keepAlive: true
         })
@@ -215,7 +265,11 @@ Remember: Use the SAME language as the question for the feedback!`;
     res.json({ 
       message: 'Responses scored successfully', 
       scored_count: responses.length,
-      scores 
+      scores,
+      debug: {
+        prompt: prompt,
+        ai_response: aiContent
+      }
     });
   } catch (error) {
     console.error('Scoring error:', error);
@@ -252,7 +306,7 @@ app.post('/api/admin/questions/:id/delete', verifyAdmin, (req, res) => {
 app.get('/api/questions', (req, res) => {
   try {
     const questions = queryToObjects(db.exec(`
-      SELECT id, question, deadline, character_limit, created_at 
+      SELECT id, question, deadline, character_limit, image_url, created_at 
       FROM questions 
       WHERE enabled = 1
       ORDER BY created_at DESC
@@ -333,6 +387,6 @@ app.get('/api/questions/:id/check/:user_id', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
 });
